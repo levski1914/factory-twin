@@ -19,3 +19,71 @@ export async function resolveAlarm(id: string) {
   });
   return res.json();
 }
+// src/services/api.ts
+
+export async function getAssets() {
+  const res = await fetch(`${API_URL}/tag-mapping/assets`);
+  return res.json();
+}
+
+export async function createAsset(data: {
+  name: string;
+  type: string;
+  location?: string;
+}) {
+  const res = await fetch(`${API_URL}/tag-mapping/assets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  return res.json();
+}
+
+export async function createTagMapping(data: any) {
+  const res = await fetch(`${API_URL}/tag-mapping`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  return res.json();
+}
+
+export async function getTagMappings(assetId?: string) {
+  const url = assetId
+    ? `${API_URL}/tag-mapping?assetId=${assetId}`
+    : `${API_URL}/tag-mapping`;
+
+  const res = await fetch(url);
+  return res.json();
+}
+
+// services/api.ts
+
+export async function testOpcConnection(endpointUrl: string) {
+  const res = await fetch("http://localhost:3000/integrations/opcua/test", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ endpointUrl }),
+  });
+
+  return res.json();
+}
+
+export async function browseOpc(endpointUrl: string, nodeId: string) {
+  const res = await fetch("http://localhost:3000/integrations/opcua/browse", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      endpointUrl,
+      nodeId,
+    }),
+  });
+
+  return res.json();
+}

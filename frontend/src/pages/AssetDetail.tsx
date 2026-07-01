@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Gauge, Thermometer, Activity, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type JSX } from "react";
 
 import {
   LineChart,
@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { assets, trendData } from "../data/mockData";
 import { socket } from "../services/socket";
+import { getTagMappings } from "../services/api";
 
 export default function AssetDetail() {
   const { assetId } = useParams();
@@ -30,101 +31,19 @@ export default function AssetDetail() {
   const [liveValues, setLiveValues] = useState(asset?.values);
   const [liveAlarms, setLiveAlarms] = useState<string[]>([]);
   const [liveTrendData, setLiveTrendData] = useState<any[]>([]);
-
-  const calculateHealth = () => {
-    if (!liveValues) return 100;
-
-    let score = 100;
-
-    const temp = liveValues.temperature ?? 0;
-    const vibration = liveValues.vibration ?? 0;
-    const current = liveValues.current ?? 0;
-
-    if (temp > 85) score -= 10;
-    if (temp > 95) score -= 15;
-    if (temp > 105) score -= 20;
-
-    if (vibration > 6) score -= 10;
-    if (vibration > 8) score -= 15;
-    if (vibration > 10) score -= 20;
-
-    if (current > 18) score -= 10;
-    if (current > 22) score -= 15;
-
-    return Math.max(score, 0);
-  };
-  const generateAlarms = () => {
-    if (!liveValues) return [];
-
-    const alarms: string[] = [];
-
-    if ((liveValues.temperature ?? 0) > 90) {
-      alarms.push("High Temperature");
-    }
-
-    if ((liveValues.vibration ?? 0) > 8) {
-      alarms.push("High Vibration");
-    }
-
-    if ((liveValues.current ?? 0) > 18) {
-      alarms.push("Over Current");
-    }
-
-    return alarms;
-  };
-  const healthScore = calculateHealth();
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [tagMappings, setTagMappings] = useState<any[]>([]);
+  const healthScore = analysis?.healthScore ?? 100;
   const [eventHistory, setEventHistory] = useState<
     { time: string; message: string }[]
   >([]);
-  const getPredictiveData = () => {
-    if (!liveValues) {
-      return {
-        wear: 0,
-        risk: "LOW",
-        daysToFailure: 999,
-        recommendation: "No action required",
-      };
-    }
 
-    const temp = liveValues.temperature ?? 0;
-    const vibration = liveValues.vibration ?? 0;
-    const current = liveValues.current ?? 0;
-    const wear = Math.min(
-      100,
-      Math.round(temp * 0.25 + vibration * 4 + Math.max(0, current - 10) * 1.5),
-    );
-
-    let risk = "LOW";
-    let daysToFailure = 90;
-    let recommendation = "Continue monitoring";
-
-    if (wear > 50) {
-      risk = "MEDIUM";
-      daysToFailure = 30;
-      recommendation = "Inspect bearing assembly";
-    }
-
-    if (wear > 70) {
-      risk = "HIGH";
-      daysToFailure = 14;
-      recommendation = "Schedule maintenance";
-    }
-
-    if (wear > 85) {
-      risk = "CRITICAL";
-      daysToFailure = 3;
-      recommendation = "Immediate shutdown recommended";
-    }
-
-    return {
-      wear,
-      risk,
-      daysToFailure,
-      recommendation,
-    };
+  const predictive = analysis?.predictive ?? {
+    wear: 0,
+    risk: "LOW",
+    daysToFailure: 999,
+    recommendation: "No action required",
   };
-
-  const predictive = getPredictiveData();
   const healthColor =
     healthScore > 80 ? "#22c55e" : healthScore > 60 ? "#facc15" : "#ef4444";
 
@@ -147,10 +66,21 @@ export default function AssetDetail() {
   //     };
   //   }, []);
   useEffect(() => {
+    async function loadMappings() {
+      if (!assetId) return;
+      const data = await getTagMappings(assetId);
+      setTagMappings(data);
+    }
+
+    loadMappings();
+  }, [assetId]);
+  useEffect(() => {
     socket.on("telemetry", (data) => {
       if (data.assetId !== assetId) return;
 
+      setAnalysis(data);
       setLiveValues(data.values);
+      setLiveAlarms(data.alarms.map((a: any) => a.message));
 
       setLiveTrendData((prev) => {
         const newPoint = {
@@ -166,35 +96,11 @@ export default function AssetDetail() {
       });
     });
 
-    // setLiveTrendData((prev) => {
-    //   const last = prev[prev.length - 1];
-
-    //   const newPoint = {
-    //     time: new Date().toLocaleTimeString("bg-BG", {
-    //       hour: "2-digit",
-    //       minute: "2-digit",
-    //       second: "2-digit",
-    //     }),
-    //     temperature: Number(
-    //       ((last.temperature ?? 63) + (Math.random() - 0.4) * 1.2).toFixed(1),
-    //     ),
-    //     vibration: Number(
-    //       ((last.vibration ?? 7.8) + (Math.random() - 0.5) * 0.4).toFixed(1),
-    //     ),
-    //     current: Number(
-    //       ((last.current ?? 8.7) + (Math.random() - 0.5) * 0.3).toFixed(1),
-    //     ),
-    //   };
-
-    //   return [...prev.slice(-9), newPoint];
-    // }, 2000);
     return () => {
       socket.off("telemetry");
     };
   }, [assetId]);
-  useEffect(() => {
-    setLiveAlarms(generateAlarms());
-  }, [liveValues]);
+
   useEffect(() => {
     setLiveTrendData([]);
     setEventHistory([]);
@@ -243,6 +149,41 @@ export default function AssetDetail() {
     );
   }
   const getMetricCards = () => {
+    const labelByRole: Record<string, string> = {
+      current: "Current",
+      temperature: "Temperature",
+      speed: "Speed",
+      load: "Load",
+      power: "Power",
+      vibration: "Vibration",
+      pressure: "Pressure",
+      flow: "Flow",
+      level: "Level",
+      position: "Position",
+    };
+
+    const iconByRole: Record<string, JSX.Element> = {
+      current: <Zap size={24} />,
+      power: <Activity size={24} />,
+      temperature: <Thermometer size={24} />,
+      speed: <Gauge size={24} />,
+      load: <Gauge size={24} />,
+      vibration: <Activity size={24} />,
+    };
+    if (tagMappings.length > 0 && liveValues) {
+      return tagMappings
+        .filter((m) => m.showAsMetric)
+        .sort((a, b) => (a.displaySlot ?? 999) - (b.displaySlot ?? 999))
+        .map((m) => {
+          const value = liveValues[m.sourceField ?? m.role];
+
+          return {
+            label: m.label ?? labelByRole[m.role] ?? m.role,
+            value: `${value ?? "--"} ${m.unit ?? ""}`,
+            icon: iconByRole[m.role] ?? <Activity size={24} />,
+          };
+        });
+    }
     if (!liveValues) return [];
 
     if (asset.type === "Motor") {
