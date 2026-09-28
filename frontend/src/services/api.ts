@@ -62,14 +62,18 @@ export async function getTagMappings(assetId?: string) {
 // services/api.ts
 
 export async function testOpcConnection(endpointUrl: string) {
-  const res = await fetch("http://localhost:3000/integrations/opcua/test", {
+  const token = localStorage.getItem("accessToken"); // използвай ключа от твоя login код
+
+  const res = await fetch(`${API_URL}/integrations/opcua/test`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ endpointUrl }),
   });
 
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
   return res.json();
 }
 

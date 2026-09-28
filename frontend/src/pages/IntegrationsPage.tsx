@@ -72,14 +72,18 @@ export default function IntegrationsPage() {
   }
   async function handleTest() {
     setStatusText("Connecting...");
-    const res = await testOpcConnection(endpointUrl);
 
-    if (res.ok) {
-      setConnected(true);
-      setStatusText("Connected");
-    } else {
+    try {
+      const res = await testOpcConnection(endpointUrl);
+      setConnected(Boolean(res.ok));
+      setStatusText(
+        res.ok ? "Connected" : (res.message ?? "Connection failed"),
+      );
+    } catch (error) {
       setConnected(false);
-      setStatusText(res.message ?? "Connection failed");
+      setStatusText(
+        error instanceof Error ? error.message : "Connection failed",
+      );
     }
   }
 
